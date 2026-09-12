@@ -26,55 +26,58 @@ app.post('/api/episodes/unlock', async (req, res) => {
       .eq('id', episodeId)
       .maybeSingle();
 
-    if (epError) {
-      return res.status(500).json({ error: 'Erro de banco ao procurar episódio', details: epError.message });
-    }
-    if (!episode) {
-      return res.status(404).json({ error: `Episódio não encontrado para o ID: ${episodeId}` });
+    if (epError || !episode) {
+      return res.status(404).json({ error: 'Episódio não encontrado' });
     }
 
-    // 2. Procurar o Utilizador
+    // 2. Verificar se o episódio JÁ FOI DESBLOQUEADO previamente
+    const { data: alreadyUnlocked } = await supabase
+      .from('unlocked_episodes')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('episode_id', episodeId)
+      .maybeSingle();
+
+    if (alreadyUnlocked) {
+      // Já comprou: retorna o vídeo sem cobrar novamente
+      return res.json({
+        success: true,
+        message: 'Episódio já estava desbloqueado!',
+        videoUrl: episode.video_url
+      });
+    }
+
+    // 3. Procurar o Utilizador
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('*')
       .eq('id', userId)
       .maybeSingle();
 
-    if (userError) {
-      return res.status(500).json({ error: 'Erro de banco ao procurar utilizador', details: userError.message });
-    }
-    if (!user) {
-      return res.status(404).json({ error: `Utilizador não encontrado para o ID: ${userId}` });
+    if (userError || !user) {
+      return res.status(404).json({ error: 'Utilizador não encontrado' });
     }
 
-    // 3. Verificar Saldo
+    // 4. Verificar Saldo
     if (user.coin_balance < episode.coin_cost) {
       return res.status(400).json({ 
-        error: 'Saldo insuficiente de moedas', 
+        error: 'Saldo insuficiente', 
         requiredCoins: episode.coin_cost,
         currentBalance: user.coin_balance 
       });
     }
 
-    // 4. Executar a transação
+    // 5. Descontar Saldo
     const newBalance = user.coin_balance - episode.coin_cost;
-
-    const { error: updateError } = await supabase
+    await supabase
       .from('users')
       .update({ coin_balance: newBalance })
       .eq('id', userId);
 
-    if (updateError) {
-      return res.status(500).json({ error: 'Erro ao atualizar saldo', details: updateError.message });
-    }
-
-    const { error: unlockError } = await supabase
+    // 6. Registrar Desbloqueio
+    await supabase
       .from('unlocked_episodes')
       .insert([{ user_id: userId, episode_id: episodeId }]);
-
-    if (unlockError) {
-      return res.status(500).json({ error: 'Erro ao registrar desbloqueio', details: unlockError.message });
-    }
 
     return res.json({ 
       success: true, 
