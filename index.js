@@ -9,12 +9,12 @@ app.use(express.json());
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-// Rota de teste (Raiz)
+// Rota raiz
 app.get('/', (req, res) => {
   res.send('API de Doramas está rodando!');
 });
 
-// Endpoint de desbloqueio de episódios
+// Rota de desbloqueio de episódios
 app.post('/api/episodes/unlock', async (req, res) => {
   const { userId, episodeId } = req.body;
 
