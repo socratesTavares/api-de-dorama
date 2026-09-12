@@ -14,54 +14,77 @@ app.get('/', (req, res) => {
   res.send('API de Doramas está rodando!');
 });
 
-// Rota de desbloqueio de episódios
+// Endpoint com verificação detalhada de erros
 app.post('/api/episodes/unlock', async (req, res) => {
   const { userId, episodeId } = req.body;
 
   try {
-    const { data: episode } = await supabase
+    // 1. Procurar o Episódio
+    const { data: episode, error: epError } = await supabase
       .from('episodes')
       .select('*')
       .eq('id', episodeId)
-      .single();
+      .maybeSingle();
 
-    const { data: user } = await supabase
+    if (epError) {
+      return res.status(500).json({ error: 'Erro de banco ao procurar episódio', details: epError.message });
+    }
+    if (!episode) {
+      return res.status(404).json({ error: `Episódio não encontrado para o ID: ${episodeId}` });
+    }
+
+    // 2. Procurar o Utilizador
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
-    if (!user || !episode) {
-      return res.status(404).json({ error: 'Utilizador ou episódio não encontrado' });
+    if (userError) {
+      return res.status(500).json({ error: 'Erro de banco ao procurar utilizador', details: userError.message });
+    }
+    if (!user) {
+      return res.status(404).json({ error: `Utilizador não encontrado para o ID: ${userId}` });
     }
 
+    // 3. Verificar Saldo
     if (user.coin_balance < episode.coin_cost) {
       return res.status(400).json({ 
-        error: 'Moedas insuficientes', 
+        error: 'Saldo insuficiente de moedas', 
         requiredCoins: episode.coin_cost,
         currentBalance: user.coin_balance 
       });
     }
 
+    // 4. Executar a transação
     const newBalance = user.coin_balance - episode.coin_cost;
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('users')
       .update({ coin_balance: newBalance })
       .eq('id', userId);
 
-    await supabase
+    if (updateError) {
+      return res.status(500).json({ error: 'Erro ao atualizar saldo', details: updateError.message });
+    }
+
+    const { error: unlockError } = await supabase
       .from('unlocked_episodes')
       .insert([{ user_id: userId, episode_id: episodeId }]);
 
+    if (unlockError) {
+      return res.status(500).json({ error: 'Erro ao registrar desbloqueio', details: unlockError.message });
+    }
+
     return res.json({ 
       success: true, 
+      message: 'Episódio desbloqueado com sucesso!',
       newBalance, 
       videoUrl: episode.video_url 
     });
 
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: 'Erro interno no servidor', details: error.message });
   }
 });
 
