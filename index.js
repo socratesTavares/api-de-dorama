@@ -135,15 +135,18 @@ app.get('/api/dramas', async (req, res) => {
 app.get('/api/episodes/drama/:dramaId', async (req, res) => {
     try {
         const { dramaId } = req.params;
+        console.log("-> Buscando episódios do drama_id:", dramaId);
 
         const { data, error } = await supabase
             .from('episodes')
-            .select('id, episode_number, title, is_free') // Subsitua 'is_locked' pelo nome real da coluna no seu banco
+            .select('*')
             .eq('drama_id', dramaId)
             .order('episode_number', { ascending: true });
 
+        console.log("-> Resultado retornado do Supabase:", data);
+
         if (error) {
-            console.error("Erro Supabase:", error.message);
+            console.error("Erro no Supabase:", error.message);
             return res.status(400).json({ error: error.message });
         }
 
