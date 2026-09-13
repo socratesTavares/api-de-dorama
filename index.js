@@ -90,7 +90,9 @@ app.get('/api/dramas', async (req, res) => {
         description,
         episodes!left (
           id,
-          episode_number
+          title,
+          episode_number,
+          video_url
         )
       `)
       .order('created_at', { ascending: false });
@@ -98,19 +100,25 @@ app.get('/api/dramas', async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
 
     const formattedDramas = (dramas || []).map(drama => {
+      // Ordena episódios pelo número do episódio
       const sortedEpisodes = (drama.episodes || []).sort((a, b) => a.episode_number - b.episode_number);
+      const firstEp = sortedEpisodes.length > 0 ? sortedEpisodes[0] : null;
+
       return {
         id: drama.id,
         title: drama.title,
         category: drama.category,
         coverUrl: drama.cover_image_url || '',
         description: drama.description || '',
-        firstEpisodeId: sortedEpisodes.length > 0 ? sortedEpisodes[0].id : null
+        firstEpisodeId: firstEp ? firstEp.id : null,
+        firstEpisodeNumber: firstEp ? firstEp.episode_number : 1,
+        firstEpisodeTitle: firstEp ? firstEp.title : 'Episódio 1'
       };
     });
 
     return res.json(formattedDramas);
   } catch (err) {
+    console.error('Erro ao buscar doramas:', err.message);
     return res.status(500).json({ error: 'Erro interno no servidor' });
   }
 });
