@@ -138,7 +138,7 @@ app.get('/api/episodes/drama/:dramaId', async (req, res) => {
 
         const { data, error } = await supabase
             .from('episodes')
-            .select('id, episode_number, title, is_locked') // Removido 'duration' daqui
+            .select('id, episode_number, title, is_free') // Subsitua 'is_locked' pelo nome real da coluna no seu banco
             .eq('drama_id', dramaId)
             .order('episode_number', { ascending: true });
 
