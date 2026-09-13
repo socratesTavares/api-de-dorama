@@ -131,6 +131,27 @@ app.get('/api/dramas', async (req, res) => {
     return res.status(500).json({ error: 'Erro interno no servidor' });
   }
 });
+// Endpoint para buscar todos episódios de um dorama específico
+app.get('/api/episodes/drama/:dramaId', async (req, res) => {
+    try {
+        const { dramaId } = req.params;
+
+        // Busca todos os episódios pertencentes ao dorama ordenados pelo número do episódio
+        const { data, error } = await supabase
+            .from('episodes')
+            .select('id, number, title, duration, is_locked')
+            .eq('drama_id', dramaId)
+            .order('number', { ascending: true });
+
+        if (error) {
+            return res.status(400).json({ error: error.message });
+        }
+
+        return res.status(200).json(data);
+    } catch (err) {
+        return res.status(500).json({ error: 'Erro interno no servidor' });
+    }
+});
 // Endpoint para desbloquear episódios com verificação detalhada de erros
 app.post('/api/episodes/unlock', async (req, res) => {
   const { userId, episodeId } = req.body;
