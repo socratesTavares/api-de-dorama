@@ -194,6 +194,91 @@ app.post('/api/users/register-guest', async (req, res) => {
     return res.status(500).json({ error: 'Erro interno no servidor' });
   }
 });
+// Endpoint para desbloquear episódios com verificação detalhada de erros
+app.post('/api/episodes/unlock', async (req, res) => {
+  const { userId, episodeId } = req.body;
+
+  if (!userId || !episodeId) {
+    return res.status(400).json({ success: false, message: 'Dados incompletos (userId ou episodeId)' });
+  }
+
+  try {
+    // 1. Procura o episódio no Supabase
+    const { data: episode, error: epError } = await supabase
+      .from('episodes')
+      .select('id, video_url, is_free, coin_cost')
+      .eq('id', episodeId)
+      .maybeSingle();
+
+    if (epError || !episode) {
+      return res.status(404).json({ success: false, message: 'Episódio não encontrado' });
+    }
+
+    // 2. Se for um episódio gratuito
+    if (episode.is_free) {
+      return res.json({
+        unlocked: true,
+        success: true,
+        videoUrl: episode.video_url,
+        coinCost: 0
+      });
+    }
+
+    // 3. Verifica se já foi desbloqueado antes
+    const { data: unlockedRecord } = await supabase
+      .from('unlocked_episodes')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('episode_id', episodeId)
+      .maybeSingle();
+
+    if (unlockedRecord) {
+      return res.json({
+        unlocked: true,
+        success: true,
+        videoUrl: episode.video_url,
+        coinCost: episode.coin_cost
+      });
+    }
+
+    // 4. Se não estiver desbloqueado, verifica o saldo de moedas do utilizador
+    const { data: user } = await supabase
+      .from('users')
+      .select('coin_balance')
+      .eq('id', userId)
+      .maybeSingle();
+
+    const cost = episode.coin_cost || 10;
+    const currentBalance = user ? (user.coin_balance || 0) : 0;
+
+    if (currentBalance < cost) {
+      return res.json({
+        unlocked: false,
+        success: false,
+        videoUrl: null,
+        coinCost: cost,
+        message: 'Moedas insuficientes para desbloquear este episódio'
+      });
+    }
+
+    // 5. Efetua o débito e registra o desbloqueio
+    const newBalance = currentBalance - cost;
+    await supabase.from('users').update({ coin_balance: newBalance }).eq('id', userId);
+    await supabase.from('unlocked_episodes').insert([{ user_id: userId, episode_id: episodeId }]);
+
+    return res.json({
+      unlocked: true,
+      success: true,
+      videoUrl: episode.video_url,
+      coinCost: cost,
+      newBalance: newBalance
+    });
+
+  } catch (error) {
+    console.error('Erro no unlock:', error.message);
+    return res.status(500).json({ success: false, message: 'Erro interno no servidor' });
+  }
+});
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
