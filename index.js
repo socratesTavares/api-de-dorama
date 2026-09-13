@@ -80,45 +80,54 @@ app.get('/api/users/:userId/balance', async (req, res) => {
 //BUSCA CATALOGOS DE DORAMAS COM EPISODIOS ORDENADOS PELO NUMERO
 app.get('/api/dramas', async (req, res) => {
   try {
-    const { data: dramas, error } = await supabase
+    // 1. Busca todos os doramas
+    const { data: dramas, error: dramaError } = await supabase
       .from('dramas')
-      .select(`
-        id,
-        title,
-        category,
-        cover_image_url,
-        description,
-        episodes!left (
-          id,
-          title,
-          episode_number,
-          video_url
-        )
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (dramaError) {
+      console.error('Erro Supabase Dramas:', dramaError.message);
+      return res.status(500).json({ error: dramaError.message });
+    }
 
-    const formattedDramas = (dramas || []).map(drama => {
-      // Ordena episódios pelo número do episódio
-      const sortedEpisodes = (drama.episodes || []).sort((a, b) => a.episode_number - b.episode_number);
-      const firstEp = sortedEpisodes.length > 0 ? sortedEpisodes[0] : null;
+    if (!dramas || dramas.length === 0) {
+      return res.json([]); // Retorna array vazio se não houver doramas
+    }
+
+    // 2. Busca os episódios para vincular o primeiro episódio
+    const { data: episodes, error: epError } = await supabase
+      .from('episodes')
+      .select('id, drama_id, title, episode_number')
+      .order('episode_number', { ascending: true });
+
+    if (epError) {
+      console.error('Erro Supabase Episódios:', epError.message);
+    }
+
+    // 3. Mapeia o resultado garantindo nomes idênticos ao Gson do Android
+    const formattedDramas = dramas.map(drama => {
+      // Procura o primeiro episódio deste dorama
+      const dramaEps = (episodes || []).filter(ep => ep.drama_id === drama.id);
+      const firstEp = dramaEps.length > 0 ? dramaEps[0] : null;
 
       return {
         id: drama.id,
-        title: drama.title,
-        category: drama.category,
-        coverUrl: drama.cover_image_url || '',
-        description: drama.description || '',
-        firstEpisodeId: firstEp ? firstEp.id : null,
+        title: drama.title || 'Sem Título',
+        category: drama.category || 'Geral',
+        coverUrl: drama.cover_image_url || drama.cover_url || '',
+        description: drama.description || 'Sem descrição cadastrada.',
+        firstEpisodeId: firstEp ? firstEp.id : 'fea190a2-90c8-4ca9-9450-354fb5ca6ee8',
         firstEpisodeNumber: firstEp ? firstEp.episode_number : 1,
         firstEpisodeTitle: firstEp ? firstEp.title : 'Episódio 1'
       };
     });
 
+    console.log(`[API /api/dramas] Retornando ${formattedDramas.length} doramas.`);
     return res.json(formattedDramas);
+
   } catch (err) {
-    console.error('Erro ao buscar doramas:', err.message);
+    console.error('Erro interno servidor:', err.message);
     return res.status(500).json({ error: 'Erro interno no servidor' });
   }
 });
