@@ -93,7 +93,7 @@ app.post('/api/episodes/unlock', async (req, res) => {
 //BUSCA CATALOGOS DE DORAMAS COM EPISODIOS ORDENADOS PELO NUMERO
 app.get('/api/dramas', async (req, res) => {
   try {
-    // Busca os doramas e traz também os episódios ordenados pelo número
+    // Usamos 'episodes!left' para evitar erros caso um dorama não tenha episódios
     const { data: dramas, error } = await supabase
       .from('dramas')
       .select(`
@@ -102,7 +102,7 @@ app.get('/api/dramas', async (req, res) => {
         category,
         cover_image_url,
         description,
-        episodes (
+        episodes!left (
           id,
           episode_number
         )
@@ -110,29 +110,28 @@ app.get('/api/dramas', async (req, res) => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Erro ao buscar doramas:', error.message);
-      return res.status(500).json({ error: 'Erro ao buscar catálogo de doramas' });
+      console.error('Erro Supabase:', error.message);
+      return res.status(500).json({ error: error.message });
     }
 
-    // Mapeia para o formato esperado pelo app Java
-    const formattedDramas = dramas.map(drama => {
-      // Ordena os episódios pelo número e pega o primeiro (Episódio 1)
-      const sortedEpisodes = drama.episodes ? drama.episodes.sort((a, b) => a.episode_number - b.episode_number) : [];
+    const formattedDramas = (dramas || []).map(drama => {
+      const sortedEpisodes = (drama.episodes || []).sort((a, b) => a.episode_number - b.episode_number);
       const firstEpId = sortedEpisodes.length > 0 ? sortedEpisodes[0].id : null;
 
       return {
         id: drama.id,
         title: drama.title,
         category: drama.category,
-        coverUrl: drama.cover_image_url, // Mapeia cover_image_url para coverUrl
+        coverUrl: drama.cover_image_url || '',
+        description: drama.description || '',
         firstEpisodeId: firstEpId
       };
     });
 
     return res.json(formattedDramas);
 
-  } catch (error) {
-    console.error('Erro interno:', error.message);
+  } catch (err) {
+    console.error('Erro interno:', err.message);
     return res.status(500).json({ error: 'Erro interno no servidor' });
   }
 });
