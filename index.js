@@ -90,6 +90,52 @@ app.post('/api/episodes/unlock', async (req, res) => {
     return res.status(500).json({ error: 'Erro interno no servidor', details: error.message });
   }
 });
+//descobrir qual é o primeiro episódio (menor episode_number) de cada dorama:
+app.get('/api/dramas', async (req, res) => {
+  try {
+    // Busca os doramas e traz também os episódios ordenados pelo número
+    const { data: dramas, error } = await supabase
+      .from('dramas')
+      .select(`
+        id,
+        title,
+        category,
+        cover_image_url,
+        description,
+        episodes (
+          id,
+          episode_number
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Erro ao buscar doramas:', error.message);
+      return res.status(500).json({ error: 'Erro ao buscar catálogo de doramas' });
+    }
+
+    // Mapeia para o formato esperado pelo app Java
+    const formattedDramas = dramas.map(drama => {
+      // Ordena os episódios pelo número e pega o primeiro (Episódio 1)
+      const sortedEpisodes = drama.episodes ? drama.episodes.sort((a, b) => a.episode_number - b.episode_number) : [];
+      const firstEpId = sortedEpisodes.length > 0 ? sortedEpisodes[0].id : null;
+
+      return {
+        id: drama.id,
+        title: drama.title,
+        category: drama.category,
+        coverUrl: drama.cover_image_url, // Mapeia cover_image_url para coverUrl
+        firstEpisodeId: firstEpId
+      };
+    });
+
+    return res.json(formattedDramas);
+
+  } catch (error) {
+    console.error('Erro interno:', error.message);
+    return res.status(500).json({ error: 'Erro interno no servidor' });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
