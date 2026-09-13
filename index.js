@@ -136,15 +136,14 @@ app.get('/api/episodes/drama/:dramaId', async (req, res) => {
     try {
         const { dramaId } = req.params;
 
-        // Subtitua 'number' abaixo pelo nome exato da coluna na sua tabela (ex: 'episode_number')
         const { data, error } = await supabase
             .from('episodes')
-            .select('id, episode_number, title, duration, is_locked') // Altere aqui se necessário
+            .select('id, episode_number, title, is_locked') // Removido 'duration' daqui
             .eq('drama_id', dramaId)
-            .order('episode_number', { ascending: true }); // <--- AQUI ESTAVA O ERRO ('number' -> 'episode_number')
+            .order('episode_number', { ascending: true });
 
         if (error) {
-            console.error("Erro no Supabase:", error.message);
+            console.error("Erro Supabase:", error.message);
             return res.status(400).json({ error: error.message });
         }
 
